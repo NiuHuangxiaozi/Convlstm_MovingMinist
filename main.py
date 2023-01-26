@@ -65,6 +65,9 @@ output_dim=1
 pre_length=10
 epoch= 100
 
+#是否训练新的模型。
+train=True
+
 
 #创建存储原来图片和预测图片的文件夹
 raw_photo="original"
@@ -80,72 +83,68 @@ if not os.path.exists(answer_photo):
 if __name__=="__main__":
     #define device
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if train==True:
+        #define model
+        model = encoder_forcasting(input_dim,hidden_dim,output_dim).to(device)
 
-    #define model
-    model = encoder_forcasting(input_dim,hidden_dim,output_dim).to(device)
+        #并行化模块，如果只有1块gpu，注释下面这一行
+        model = torch.nn.DataParallel(model).to(device)
 
-    #并行化模块，如果只有1块gpu，注释下面这一行
-    model = torch.nn.DataParallel(model).to(device)
+        #define optimizer
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        #define loss function
+        criterion=nn.MSELoss().cuda()
 
-    #define optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    #define loss function
-    criterion=nn.MSELoss().cuda()
+        losses=[]
+        epoches=[i for i in range(1,epoch+1)]
 
-    losses=[]
-    epoches=[i for i in range(1,epoch+1)]
+        #train
+        model.train()
+        for epc in range(epoch):
+            epoch_loss=[]
+            for batchidx, (data, label) in enumerate(train_loader):
+                data=data/255
+                label=label/255
+                '''
+                data:[batch,timestep=10,height=64,weight=64]
+                经过unsqueeze之后变为
+                data:[batch,timestep=10,channel=1,height=64,weight=64]
+                '''
+                data = data.unsqueeze(dim=2).to(device).float()
+                label = label.unsqueeze(dim=2).to(device).float()
 
-    #train
-    model.train()
-    for epc in range(epoch):
-        epoch_loss=[]
-        for batchidx, (data, label) in enumerate(train_loader):
-            data=data/255
-            label=label/255
-            '''
-            data:[batch,timestep=10,height=64,weight=64]
-            经过unsqueeze之后变为
-            data:[batch,timestep=10,channel=1,height=64,weight=64]
-            '''
-            data = data.unsqueeze(dim=2).to(device).float()
-            label = label.unsqueeze(dim=2).to(device).float()
+                answer_pred = model(data, pre_length)
 
-            answer_pred = model(data, pre_length)
+                answer_pred=answer_pred.squeeze()
+                label=label.squeeze()
+                '''
+                经过squeeze变化：
+                before:[batch,timestep=10,channel=1,height=64,weight=64]
+                after:[batch,timestep=10,height=64,weight=64]
+                '''
+                loss = criterion(answer_pred, label)
+                optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=10.0)
+                optimizer.step()
 
-            answer_pred=answer_pred.squeeze()
-            label=label.squeeze()
-            '''
-            经过squeeze变化：
-            before:[batch,timestep=10,channel=1,height=64,weight=64]
-            after:[batch,timestep=10,height=64,weight=64]
-            '''
-            loss = criterion(answer_pred, label)
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=10.0)
-            optimizer.step()
+                print(f'\r batchs [{epc + 1}/{epoch + 1}] Loss: {loss.item() / label.shape[0]:.10f}', end='')
+                epoch_loss.append(loss.detach().item()*label.shape[0])
+            losses.append(sum(epoch_loss)/len(train_set))
+            #打印这一轮的错误
+            print("Epoch", epc + 1,"/",epoch+1 ,"Loss:", sum(epoch_loss)/len(train_set))
 
-            print(f'\r batchs [{epc + 1}/{epoch + 1}] Loss: {loss.item() / label.shape[0]:.10f}', end='')
-            epoch_loss.append(loss.detach().item()*label.shape[0])
-        losses.append(sum(epoch_loss)/len(train_set))
-        #打印这一轮的错误
-        print("Epoch", epc + 1,"/",epoch+1 ,"Loss:", sum(epoch_loss)/len(train_set))
+        #保存模型
+        torch.save(model.state_dict(), "my_model_100_1.pt")
 
-    #保存模型
-    torch.save(model.state_dict(), "my_model_100_1.pt")
-
-    #展示loss-epoch的变化
-    show_result(epoches, losses)
-
-    # 读取已经训练好的模型
-    '''
-    #model = EncoderDecoderConvLSTM(hidden_dim, input_dim).to(device)
-    #model = torch.nn.DataParallel(model).to(device)
-    model = encoder_forcasting(input_dim, hidden_dim, output_dim).to(device)
-    model = torch.nn.DataParallel(model).to(device)
-    model.load_state_dict(torch.load("my_model_100.pt"))
-    criterion = nn.MSELoss().cuda()
-    '''
+        #展示loss-epoch的变化
+        show_result(epoches, losses)
+    else:
+        # 读取已经训练好的模型
+        model = encoder_forcasting(input_dim, hidden_dim, output_dim).to(device)
+        model = torch.nn.DataParallel(model).to(device)
+        model.load_state_dict(torch.load("my_model_100.pt"))
+        criterion = nn.MSELoss().cuda()
     #模型的测试阶段
     model.eval()
     test_loss=[]
