@@ -59,6 +59,30 @@ matplotlib 3.2.2
 
 ### 1、download the dataset from the web (See Dataset part)
 
+```python
+'''
+If download from the web is not successful ,you can download the mnist_test_seq.npy into the ./raw file
+open the MovingMNIST.py and find the following code. This part is used to  download from the web automatically. Comment out this part to bypass the download.
+'''
+
+
+'''
+        for url in self.urls:
+            print('Downloading ' + url)
+            data = urllib.request.urlopen(url)
+            filename = url.rpartition('/')[2]
+            file_path = os.path.join(self.root, self.raw_folder, filename)
+            with open(file_path, 'wb') as f:
+                f.write(data.read())
+            with open(file_path.replace('.gz', ''), 'wb') as out_f, \
+                    gzip.GzipFile(file_path) as zip_f:
+                out_f.write(zip_f.read())
+            os.unlink(file_path)
+        '''
+```
+
+
+
 ### 2、run the main.py
 
 ```
