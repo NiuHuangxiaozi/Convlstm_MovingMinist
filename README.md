@@ -109,8 +109,7 @@ After the experiment , we found that the more epoches you train,the more better 
 
 <img src="./predict_2.jpg" width="400px" />
 
-Recollection：
-This is my first program  on deep learning, so there is most likely existing lots of something incorrect in the codes. 
+Notice: This is my first program on deep learning, so there may be many errors in the code. For research only.
 
 
 
